@@ -48,6 +48,118 @@ for the tray to work too.
                                    └──────────────────────┘
 ```
 
+### Repository layout
+
+```
+rdl-tray/
+├── Cargo.toml                 Package manifest, dependencies, release profile
+├── Cargo.lock                 Pinned transitive dependency versions
+├── rust-toolchain.toml        Toolchain pin (stable, x86_64-pc-windows-msvc)
+├── .cargo/
+│   └── config.toml            Build target + linker flags (static CRT,
+│                              /SUBSYSTEM:WINDOWS so no console window appears)
+├── .gitignore                 Excludes target/, secrets, IDE state
+├── build.rs                   Embeds the Win32 manifest + version info via
+│                              embed-resource
+├── src/
+│   ├── main.rs                Hidden top-level window + Win32 message loop;
+│   │                          dispatches WM_TRAY_ICON, WM_CLIPBOARDUPDATE,
+│   │                          WM_COMMAND
+│   ├── tray.rs                Shell_NotifyIconW lifecycle (NIM_ADD /
+│   │                          NIM_SETVERSION / NIM_DELETE)
+│   ├── clipboard.rs           AddClipboardFormatListener subscription, CF_UNICODETEXT
+│   │                          read, regex-based URL extraction with unit tests
+│   ├── notify.rs              Balloon notifications via NIM_MODIFY + NIF_INFO
+│   ├── client.rs              reqwest::blocking client; POST /api/dl with
+│   │                          DPAPI-decrypted bearer token
+│   ├── config.rs              Config load + DPAPI unprotect for the persisted
+│   │                          token (shared with rdl CLI)
+│   └── error.rs               Crate-wide thiserror enum
+├── tests/
+│   └── integration.rs         assert_cmd-based smoke check on the built binary
+├── resources/
+│   ├── app.rc                 Win32 resource script (manifest reference,
+│   │                          VERSIONINFO block)
+│   └── app.manifest           PerMonitorV2 DPI, Common Controls v6, UTF-8,
+│                              asInvoker
+└── .github/workflows/
+    ├── build.yml              CI: cargo build --release on windows-latest;
+    │                          uploads rdl-tray.exe artifact; cuts a Release on
+    │                          tag push
+    └── test.yml               CI: cargo fmt --check, cargo clippy -D warnings,
+                               cargo test --all-targets
+```
+
+### Compatibility
+
+| Axis | Supported |
+|---|---|
+| Operating system | Windows 10 1809+ and Windows 11 (PerMonitorV2 manifest) |
+| Architecture | x86_64 only (single-target by design) |
+| Rust toolchain | 1.75+ (`rust-toolchain.toml` pins stable) |
+| Linker | MSVC (Visual Studio Build Tools 2022) |
+
+The shipped binary is statically linked against the MSVC runtime
+(`+crt-static`), so it has no DLL dependencies beyond what Windows itself
+guarantees (`KERNEL32.DLL`, `USER32.DLL`, `SHELL32.DLL`, `ADVAPI32.DLL`,
+`CRYPT32.DLL` from DPAPI, `WS2_32.DLL` for sockets).
+
+### Security considerations
+
+- **Token at rest** — the bearer token is wrapped with the Windows DPAPI
+  (`CryptProtectData`) before it touches disk. Only the originating Windows
+  user account can decrypt it; copying `config.json` to another machine or
+  another user's session yields nothing useful.
+- **Token in transit** — `reqwest` is built with `https_only=true` so the
+  client refuses plaintext HTTP redirects. The bearer token is sent in the
+  `Authorization` header over TLS, never in the URL.
+- **No telemetry** — the binary makes no network calls other than to the
+  configured worker URL.
+- **No auto-update** — there is no background updater, no phone-home, no
+  crash reporter.
+- **No console output** — the binary is built with `windows_subsystem =
+  "windows"`, so even with a debug build there is no console window from
+  which a screen reader could leak credentials.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Resolution |
+|---|---|---|
+| "config not found" balloon | `rdl auth login` was never run | Run `rdl auth login --token <token>` from any terminal once |
+| "server rejected credentials (401)" | token revoked or expired | Issue a new token from the Telegram bot, then `rdl auth login --token …` |
+| Tray icon never appears | another process owns the same `uID` (collision) | Open Task Manager → end any stale `rdl-tray.exe`, then relaunch |
+| Clipboard balloon never appears | listener registration failed | Check `Get-EventLog -LogName Application -Source rdl-tray` for errors |
+| Process exits silently on launch | missing MSVC runtime (rare; we link statically) | Reinstall Microsoft Visual C++ Redistributable 2015-2022 |
+
+### Contributing
+
+This is a personal-use companion tool, but PRs that improve clipboard
+handling robustness, add WinRT toast notifications with action buttons, or
+trim the binary further are welcome.
+
+Before opening a PR:
+
+```bash
+cargo fmt
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+```
+
+The CI runs the same three checks; PRs that break any of them will be
+flagged.
+
+### Acknowledgements
+
+- [`windows`](https://crates.io/crates/windows) — the official Microsoft Win32
+  bindings for Rust. Does the heavy lifting of Shell_NotifyIconW,
+  AddClipboardFormatListener, and CryptProtectData.
+- [`reqwest`](https://crates.io/crates/reqwest) +
+  [`rustls`](https://crates.io/crates/rustls) — TLS-only HTTP client.
+- [`directories`](https://crates.io/crates/directories) — cross-platform path
+  resolution for `%APPDATA%\rdl\config.json`.
+- [`embed-resource`](https://crates.io/crates/embed-resource) — compiles the
+  Win32 manifest into the PE.
+
 ### Installation
 
 #### Pre-built binary (Windows x64)
@@ -119,6 +231,27 @@ URL을 복사할 때마다 알림으로 "받을까요?" 묻습니다.
 - **마지막 URL 재전송** — 직전에 복사한 URL을 한 번 클릭으로 다시 큐잉
 - **단일 바이너리** — 정적 링크, 약 1.5 MB, DLL 의존성 0
 - **Per-Monitor DPI v2 매니페스트** — 혼합 DPI 환경에서 선명하게 렌더링
+
+### 프로젝트 구조
+
+```
+rdl-tray/
+├── Cargo.toml              패키지 매니페스트, 의존성, 릴리스 프로파일
+├── rust-toolchain.toml     툴체인 고정 (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      빌드 타겟 + 링커 플래그 (정적 CRT)
+├── build.rs                Win32 매니페스트 + 버전 정보 임베드
+├── src/
+│   ├── main.rs             히든 윈도우 + Win32 메시지 루프
+│   ├── tray.rs             Shell_NotifyIconW 라이프사이클 관리
+│   ├── clipboard.rs        AddClipboardFormatListener + URL 추출
+│   ├── notify.rs           NIM_MODIFY + NIF_INFO 기반 벌룬 알림
+│   ├── client.rs           reqwest::blocking 클라이언트, POST /api/dl
+│   ├── config.rs           설정 로드 + DPAPI 토큰 복호화
+│   └── error.rs            크레이트 전체 에러 타입
+├── tests/integration.rs    assert_cmd 기반 스모크 테스트
+├── resources/              Win32 리소스 스크립트 + 매니페스트
+└── .github/workflows/      cargo build + fmt/clippy/test CI
+```
 
 ### 동작 흐름
 
@@ -202,6 +335,27 @@ MIT. [LICENSE](./LICENSE) 참고.
 - **直近 URL の再送信** — 直前にコピーした URL をワンクリックで再キュー
 - **単一バイナリ** — 静的リンク、約 1.5 MB、DLL 依存なし
 
+### プロジェクト構成
+
+```
+rdl-tray/
+├── Cargo.toml              パッケージマニフェスト、依存関係、リリースプロファイル
+├── rust-toolchain.toml     ツールチェイン固定 (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      ビルドターゲット + リンカフラグ (静的 CRT)
+├── build.rs                Win32 マニフェスト + バージョン情報の埋め込み
+├── src/
+│   ├── main.rs             非表示ウィンドウ + Win32 メッセージループ
+│   ├── tray.rs             Shell_NotifyIconW のライフサイクル管理
+│   ├── clipboard.rs        AddClipboardFormatListener + URL 抽出
+│   ├── notify.rs           NIM_MODIFY + NIF_INFO によるバルーン通知
+│   ├── client.rs           reqwest::blocking クライアント、POST /api/dl
+│   ├── config.rs           設定読み込み + DPAPI でのトークン復号
+│   └── error.rs            クレート全体のエラー型
+├── tests/integration.rs    assert_cmd によるスモークテスト
+├── resources/              Win32 リソーススクリプト + マニフェスト
+└── .github/workflows/      cargo build + fmt/clippy/test の CI
+```
+
 詳細なインストール、設定、CLI リファレンスは [English](#english) セクションを
 参照してください。
 
@@ -232,6 +386,27 @@ MIT。[LICENSE](./LICENSE) を参照。
 - **暂停 / 恢复** — 通过托盘菜单切换监听器,无需退出
 - **重新发送上一个 URL** — 一键重新加入最近复制的 URL
 - **单一二进制** — 静态链接,约 1.5 MB,无 DLL 依赖
+
+### 项目结构
+
+```
+rdl-tray/
+├── Cargo.toml              包清单、依赖、发布配置
+├── rust-toolchain.toml     工具链锁定 (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      构建目标 + 链接器标志 (静态 CRT)
+├── build.rs                嵌入 Win32 清单 + 版本信息
+├── src/
+│   ├── main.rs             隐藏窗口 + Win32 消息循环
+│   ├── tray.rs             Shell_NotifyIconW 生命周期管理
+│   ├── clipboard.rs        AddClipboardFormatListener + URL 提取
+│   ├── notify.rs           通过 NIM_MODIFY + NIF_INFO 的气泡通知
+│   ├── client.rs           reqwest::blocking 客户端,POST /api/dl
+│   ├── config.rs           配置加载 + DPAPI 解密令牌
+│   └── error.rs            crate 范围的错误类型
+├── tests/integration.rs    基于 assert_cmd 的冒烟测试
+├── resources/              Win32 资源脚本 + 清单
+└── .github/workflows/      cargo build + fmt/clippy/test 的 CI
+```
 
 完整的安装、配置和 CLI 参考请参见 [English](#english) 部分。
 
@@ -268,6 +443,27 @@ MIT。详见 [LICENSE](./LICENSE)。
   предыдущего скопированного URL одним кликом
 - **Единый бинарный файл** — статически слинкован, ~1.5 МБ, без зависимостей DLL
 
+### Структура проекта
+
+```
+rdl-tray/
+├── Cargo.toml              Манифест пакета, зависимости, профиль release
+├── rust-toolchain.toml     Закрепление toolchain (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Цель сборки + флаги компоновщика (статическая CRT)
+├── build.rs                Встраивание манифеста Win32 + информации о версии
+├── src/
+│   ├── main.rs             Скрытое окно + цикл сообщений Win32
+│   ├── tray.rs             Управление жизненным циклом Shell_NotifyIconW
+│   ├── clipboard.rs        AddClipboardFormatListener + извлечение URL
+│   ├── notify.rs           Всплывающие уведомления через NIM_MODIFY + NIF_INFO
+│   ├── client.rs           reqwest::blocking клиент, POST /api/dl
+│   ├── config.rs           Загрузка конфигурации + расшифровка токена через DPAPI
+│   └── error.rs            Тип ошибки уровня крейта
+├── tests/integration.rs    Smoke-тесты на основе assert_cmd
+├── resources/              Win32 resource script + манифест
+└── .github/workflows/      CI для cargo build + fmt/clippy/test
+```
+
 Подробные инструкции по установке, настройке и CLI см. в разделе
 [English](#english).
 
@@ -302,6 +498,27 @@ tray cũng hoạt động.
 - **Gửi lại URL cuối cùng** — đưa lại URL vừa sao chép vào hàng đợi với một
   cú click
 - **Binary đơn** — link tĩnh, khoảng 1.5 MB, không phụ thuộc DLL
+
+### Cấu trúc dự án
+
+```
+rdl-tray/
+├── Cargo.toml              Manifest gói, dependencies, cấu hình release
+├── rust-toolchain.toml     Cố định toolchain (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Mục tiêu build + cờ linker (CRT tĩnh)
+├── build.rs                Nhúng manifest Win32 + thông tin phiên bản
+├── src/
+│   ├── main.rs             Cửa sổ ẩn + vòng lặp message Win32
+│   ├── tray.rs             Quản lý vòng đời Shell_NotifyIconW
+│   ├── clipboard.rs        AddClipboardFormatListener + trích xuất URL
+│   ├── notify.rs           Thông báo bóng qua NIM_MODIFY + NIF_INFO
+│   ├── client.rs           Client reqwest::blocking, POST /api/dl
+│   ├── config.rs           Tải cấu hình + giải mã token DPAPI
+│   └── error.rs            Kiểu lỗi của crate
+├── tests/integration.rs    Kiểm thử smoke dựa trên assert_cmd
+├── resources/              Resource script Win32 + manifest
+└── .github/workflows/      CI cho cargo build + fmt/clippy/test
+```
 
 Hướng dẫn cài đặt, cấu hình và tham chiếu CLI đầy đủ có ở phần
 [English](#english).
@@ -338,6 +555,27 @@ kimlik doğrulaması yapmak tepsi için de yeterlidir.
 - **Son URL'yi tekrar gönder** — son kopyalanan URL'yi tek tıkla yeniden
   kuyruğa alın
 - **Tek ikili dosya** — statik bağlı, ~1.5 MB, DLL bağımlılığı yok
+
+### Proje yapısı
+
+```
+rdl-tray/
+├── Cargo.toml              Paket manifesti, bağımlılıklar, release profili
+├── rust-toolchain.toml     Toolchain sabitleme (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Derleme hedefi + bağlayıcı bayrakları (statik CRT)
+├── build.rs                Win32 manifest + sürüm bilgisi gömme
+├── src/
+│   ├── main.rs             Gizli pencere + Win32 mesaj döngüsü
+│   ├── tray.rs             Shell_NotifyIconW yaşam döngüsü yönetimi
+│   ├── clipboard.rs        AddClipboardFormatListener + URL çıkarma
+│   ├── notify.rs           NIM_MODIFY + NIF_INFO ile balon bildirimleri
+│   ├── client.rs           reqwest::blocking istemcisi, POST /api/dl
+│   ├── config.rs           Yapılandırma yükleme + DPAPI ile token çözme
+│   └── error.rs            Crate genelinde hata türü
+├── tests/integration.rs    assert_cmd tabanlı smoke testler
+├── resources/              Win32 resource script + manifest
+└── .github/workflows/      cargo build + fmt/clippy/test için CI
+```
 
 Ayrıntılı kurulum, yapılandırma ve CLI başvurusu için [English](#english)
 bölümüne bakın.
@@ -376,6 +614,27 @@ die CLI ausreicht, damit auch das Tray funktioniert.
   erneut einreihen
 - **Einzelne Binärdatei** — statisch gelinkt, ~1.5 MB, keine DLL-Abhängigkeiten
 
+### Projektstruktur
+
+```
+rdl-tray/
+├── Cargo.toml              Paketmanifest, Abhängigkeiten, Release-Profil
+├── rust-toolchain.toml     Toolchain-Pin (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Build-Ziel + Linker-Flags (statische CRT)
+├── build.rs                Bettet Win32-Manifest + Versionsinfo ein
+├── src/
+│   ├── main.rs             Verstecktes Fenster + Win32-Nachrichtenschleife
+│   ├── tray.rs             Shell_NotifyIconW-Lebenszyklusverwaltung
+│   ├── clipboard.rs        AddClipboardFormatListener + URL-Extraktion
+│   ├── notify.rs           Sprechblasen-Benachrichtigungen via NIM_MODIFY + NIF_INFO
+│   ├── client.rs           reqwest::blocking-Client, POST /api/dl
+│   ├── config.rs           Konfiguration laden + Token via DPAPI entschlüsseln
+│   └── error.rs            Crate-weiter Fehlertyp
+├── tests/integration.rs    Smoke-Tests basierend auf assert_cmd
+├── resources/              Win32-Resource-Script + Manifest
+└── .github/workflows/      CI für cargo build + fmt/clippy/test
+```
+
 Ausführliche Installations-, Konfigurations- und CLI-Referenzanleitungen
 findest du im Abschnitt [English](#english).
 
@@ -412,6 +671,27 @@ es suficiente para que el tray también funcione.
   con un solo clic
 - **Binario único** — enlazado estáticamente, ~1.5 MB, sin dependencias DLL
 
+### Estructura del proyecto
+
+```
+rdl-tray/
+├── Cargo.toml              Manifiesto del paquete, dependencias, perfil release
+├── rust-toolchain.toml     Fijación del toolchain (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Destino de compilación + flags del linker (CRT estático)
+├── build.rs                Incrusta el manifiesto Win32 + información de versión
+├── src/
+│   ├── main.rs             Ventana oculta + bucle de mensajes Win32
+│   ├── tray.rs             Gestión del ciclo de vida de Shell_NotifyIconW
+│   ├── clipboard.rs        AddClipboardFormatListener + extracción de URL
+│   ├── notify.rs           Notificaciones tipo globo vía NIM_MODIFY + NIF_INFO
+│   ├── client.rs           Cliente reqwest::blocking, POST /api/dl
+│   ├── config.rs           Carga de configuración + descifrado del token DPAPI
+│   └── error.rs            Tipo de error del crate
+├── tests/integration.rs    Pruebas smoke basadas en assert_cmd
+├── resources/              Script de recursos Win32 + manifiesto
+└── .github/workflows/      CI para cargo build + fmt/clippy/test
+```
+
 Para instrucciones completas de instalación, configuración y referencia de
 CLI, consulta la sección [English](#english).
 
@@ -447,6 +727,27 @@ suficiente para que o tray também funcione.
 - **Reenviar a última URL** — recolocar a URL copiada anteriormente na fila
   com um clique
 - **Binário único** — linkado estaticamente, ~1.5 MB, sem dependências de DLL
+
+### Estrutura do projeto
+
+```
+rdl-tray/
+├── Cargo.toml              Manifesto do pacote, dependências, perfil release
+├── rust-toolchain.toml     Fixação do toolchain (stable / x86_64-pc-windows-msvc)
+├── .cargo/config.toml      Alvo de build + flags do linker (CRT estática)
+├── build.rs                Embute o manifesto Win32 + informação de versão
+├── src/
+│   ├── main.rs             Janela oculta + loop de mensagens Win32
+│   ├── tray.rs             Gerenciamento do ciclo de vida do Shell_NotifyIconW
+│   ├── clipboard.rs        AddClipboardFormatListener + extração de URL
+│   ├── notify.rs           Notificações em balão via NIM_MODIFY + NIF_INFO
+│   ├── client.rs           Cliente reqwest::blocking, POST /api/dl
+│   ├── config.rs           Carga de configuração + descriptografia DPAPI do token
+│   └── error.rs            Tipo de erro do crate
+├── tests/integration.rs    Testes smoke baseados em assert_cmd
+├── resources/              Script de recursos Win32 + manifesto
+└── .github/workflows/      CI para cargo build + fmt/clippy/test
+```
 
 Para instruções completas de instalação, configuração e referência da CLI,
 consulte a seção [English](#english).
