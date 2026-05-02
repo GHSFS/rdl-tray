@@ -1,0 +1,9 @@
+[build]
+target = "x86_64-pc-windows-msvc"
+
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    # Build a windows-subsystem binary so no console window appears at launch.
+    "-C", "link-args=/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup",
+]

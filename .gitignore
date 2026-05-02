@@ -1,0 +1,27 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Local config / secrets
+*.local.json
+.env
+.env.local
+.pat
+*.pat
+*.token
+secrets/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Build artifacts
+*.pdb
+*.exp
+*.lib

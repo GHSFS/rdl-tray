@@ -1,0 +1,39 @@
+// Win32 resource script — embeds the application manifest into the PE.
+
+#include <winuser.h>
+
+#ifndef RT_MANIFEST
+#define RT_MANIFEST 24
+#endif
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
+
+// Version information block.
+1 VERSIONINFO
+FILEVERSION     0,1,0,0
+PRODUCTVERSION  0,1,0,0
+FILEFLAGSMASK   0x3FL
+FILEFLAGS       0x0L
+FILEOS          0x40004L
+FILETYPE        0x1L
+FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "GHSFS"
+            VALUE "FileDescription",  "rdl-tray clipboard URL watcher"
+            VALUE "FileVersion",      "0.1.0.0"
+            VALUE "InternalName",     "rdl-tray"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 GHSFS"
+            VALUE "OriginalFilename", "rdl-tray.exe"
+            VALUE "ProductName",      "remote-dl tray companion"
+            VALUE "ProductVersion",   "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04B0
+    END
+END
