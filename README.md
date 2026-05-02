@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue)](#installation)
 
-[English](#english) · [한국어](#한국어)
+[English](#english) · [한국어](#한국어) · [日本語](#日本語) · [中文](#中文) · [Русский](#русский) · [Tiếng Việt](#tiếng-việt) · [Türkçe](#türkçe) · [Deutsch](#deutsch) · [Español](#español) · [Português](#português)
 
 ---
 
@@ -176,3 +176,281 @@ MIT. [LICENSE](./LICENSE) 참고.
 
 개인용 보조 도구입니다. 출처 사이트의 이용약관 및 저작권법 준수는 전적으로
 운영자(사용자) 본인의 책임입니다.
+
+---
+
+## 日本語
+
+### 概要
+
+`rdl-tray.exe` は [`rdl`](https://github.com/GHSFS/remote-dl) CLI クライアントと
+組になって動く、軽量なネイティブ Windows アプリケーションです。CLI が
+ターミナルでの `rdl <url>` 明示的な呼び出しを担当するのに対し、`rdl-tray` は
+バックグラウンドの自動化を提供します — クリップボードに URL がコピーされる
+たびに、クラウドストレージに取得するかどうかを通知で確認します。
+
+両バイナリは同じディスク設定ファイル(`%APPDATA%\rdl\config.json`)を共有する
+ため、CLI で一度認証すればトレイも動作します。
+
+### 特徴
+
+- **クリップボード URL 検出** — `AddClipboardFormatListener` で変更を購読し、
+  最初の `http(s)://` URL を抽出
+- **ネイティブ Win32 トレイアイコン** — `Shell_NotifyIconW` + 右クリックメニュー
+- **バルーン通知** — 確認プロンプトとキュー結果を Windows アクションセンターに表示
+- **一時停止 / 再開** — トレイメニューから終了せずにリスナーを切り替え
+- **直近 URL の再送信** — 直前にコピーした URL をワンクリックで再キュー
+- **単一バイナリ** — 静的リンク、約 1.5 MB、DLL 依存なし
+
+詳細なインストール、設定、CLI リファレンスは [English](#english) セクションを
+参照してください。
+
+### ライセンス
+
+MIT。[LICENSE](./LICENSE) を参照。
+
+---
+
+## 中文
+
+### 概述
+
+`rdl-tray.exe` 是一个与 [`rdl`](https://github.com/GHSFS/remote-dl) CLI
+客户端配套的小型原生 Windows 应用程序。CLI 处理终端中显式的 `rdl <url>`
+调用,而 `rdl-tray` 提供后台场景:每当你将 URL 复制到剪贴板时,通知栏会询问
+是否要将其下载到你的云存储。
+
+两个二进制文件共享同一份磁盘配置文件(`%APPDATA%\rdl\config.json`),因此只需
+通过 CLI 进行一次认证,托盘程序也能正常工作。
+
+### 特性
+
+- **剪贴板 URL 检测** — 使用 `AddClipboardFormatListener` 监听变化,提取第一个
+  `http(s)://` URL
+- **原生 Win32 托盘图标** — `Shell_NotifyIconW` + 右键菜单
+- **气泡通知** — 在 Windows 操作中心显示确认提示和队列状态
+- **暂停 / 恢复** — 通过托盘菜单切换监听器,无需退出
+- **重新发送上一个 URL** — 一键重新加入最近复制的 URL
+- **单一二进制** — 静态链接,约 1.5 MB,无 DLL 依赖
+
+完整的安装、配置和 CLI 参考请参见 [English](#english) 部分。
+
+### 许可证
+
+MIT。详见 [LICENSE](./LICENSE)。
+
+---
+
+## Русский
+
+### Обзор
+
+`rdl-tray.exe` — это небольшое нативное Windows-приложение, работающее в паре
+с CLI-клиентом [`rdl`](https://github.com/GHSFS/remote-dl). Если CLI
+обрабатывает явные вызовы `rdl <url>` из терминала, то `rdl-tray` покрывает
+фоновый сценарий: при каждом копировании URL в буфер обмена уведомление
+спрашивает, нужно ли загрузить его в ваше облачное хранилище.
+
+Оба бинарных файла используют один и тот же файл конфигурации на диске
+(`%APPDATA%\rdl\config.json`), поэтому однократной аутентификации через CLI
+достаточно для работы трея.
+
+### Возможности
+
+- **Обнаружение URL в буфере обмена** — слушатель `AddClipboardFormatListener`
+  и извлечение первого `http(s)://` URL
+- **Нативная иконка в области уведомлений Win32** — `Shell_NotifyIconW`
+  с контекстным меню по правому клику
+- **Всплывающие уведомления** — подтверждения и статус очереди в Центре
+  уведомлений Windows
+- **Пауза / возобновление** — переключение слушателя из меню трея без выхода
+- **Повторная отправка последнего URL** — повторная постановка в очередь
+  предыдущего скопированного URL одним кликом
+- **Единый бинарный файл** — статически слинкован, ~1.5 МБ, без зависимостей DLL
+
+Подробные инструкции по установке, настройке и CLI см. в разделе
+[English](#english).
+
+### Лицензия
+
+MIT. См. [LICENSE](./LICENSE).
+
+---
+
+## Tiếng Việt
+
+### Tổng quan
+
+`rdl-tray.exe` là một ứng dụng Windows native nhỏ gọn, đi kèm với client CLI
+[`rdl`](https://github.com/GHSFS/remote-dl). Trong khi CLI xử lý các lệnh
+`rdl <url>` rõ ràng từ terminal, `rdl-tray` lo phần tự động hóa nền — mỗi khi
+bạn sao chép một URL vào clipboard, một thông báo sẽ hỏi liệu bạn có muốn
+tải nó vào kho lưu trữ đám mây hay không.
+
+Hai binary chia sẻ cùng một tệp cấu hình trên đĩa
+(`%APPDATA%\rdl\config.json`), vì vậy chỉ cần xác thực một lần qua CLI là
+tray cũng hoạt động.
+
+### Tính năng
+
+- **Phát hiện URL từ clipboard** — lắng nghe qua `AddClipboardFormatListener`
+  và trích xuất URL `http(s)://` đầu tiên
+- **Biểu tượng tray Win32 native** — `Shell_NotifyIconW` + menu chuột phải
+- **Thông báo bóng** — lời nhắc xác nhận và trạng thái hàng đợi trong Action
+  Center của Windows
+- **Tạm dừng / tiếp tục** — bật/tắt listener từ menu tray mà không cần thoát
+- **Gửi lại URL cuối cùng** — đưa lại URL vừa sao chép vào hàng đợi với một
+  cú click
+- **Binary đơn** — link tĩnh, khoảng 1.5 MB, không phụ thuộc DLL
+
+Hướng dẫn cài đặt, cấu hình và tham chiếu CLI đầy đủ có ở phần
+[English](#english).
+
+### Giấy phép
+
+MIT. Xem [LICENSE](./LICENSE).
+
+---
+
+## Türkçe
+
+### Genel Bakış
+
+`rdl-tray.exe`, [`rdl`](https://github.com/GHSFS/remote-dl) CLI istemcisiyle
+eşleşen küçük yerel bir Windows uygulamasıdır. CLI, terminalden açık `rdl
+<url>` çağrılarını işlerken, `rdl-tray` arka plan otomasyonunu sağlar —
+panoya bir URL kopyaladığınızda, onu bulut depolamanıza indirmek isteyip
+istemediğinizi soran bir bildirim gösterir.
+
+Her iki ikili de aynı disk yapılandırma dosyasını
+(`%APPDATA%\rdl\config.json`) paylaşır, bu nedenle CLI üzerinden bir kez
+kimlik doğrulaması yapmak tepsi için de yeterlidir.
+
+### Özellikler
+
+- **Pano URL algılama** — `AddClipboardFormatListener` ile değişiklikleri
+  dinler ve içerikten ilk `http(s)://` URL'sini çıkarır
+- **Yerel Win32 sistem tepsisi simgesi** — `Shell_NotifyIconW` + sağ tık menüsü
+- **Balon bildirimleri** — onay istemleri ve kuyruk durumu Windows Eylem
+  Merkezi'nde gösterilir
+- **Duraklat / devam ettir** — uygulamayı kapatmadan tepsi menüsünden
+  dinleyiciyi açıp kapatın
+- **Son URL'yi tekrar gönder** — son kopyalanan URL'yi tek tıkla yeniden
+  kuyruğa alın
+- **Tek ikili dosya** — statik bağlı, ~1.5 MB, DLL bağımlılığı yok
+
+Ayrıntılı kurulum, yapılandırma ve CLI başvurusu için [English](#english)
+bölümüne bakın.
+
+### Lisans
+
+MIT. [LICENSE](./LICENSE) dosyasına bakın.
+
+---
+
+## Deutsch
+
+### Überblick
+
+`rdl-tray.exe` ist eine kleine native Windows-Anwendung, die mit dem
+CLI-Client [`rdl`](https://github.com/GHSFS/remote-dl) zusammenarbeitet.
+Während die CLI explizite `rdl <url>`-Aufrufe aus dem Terminal verarbeitet,
+übernimmt `rdl-tray` den Hintergrundfall: Sobald du eine URL in die
+Zwischenablage kopierst, fragt eine Benachrichtigung, ob du sie in deinen
+Cloud-Speicher abrufen möchtest.
+
+Beide Binärdateien teilen sich dieselbe Konfigurationsdatei
+(`%APPDATA%\rdl\config.json`), sodass eine einmalige Authentifizierung über
+die CLI ausreicht, damit auch das Tray funktioniert.
+
+### Funktionen
+
+- **URL-Erkennung in der Zwischenablage** — hört über
+  `AddClipboardFormatListener` mit und extrahiert die erste `http(s)://`-URL
+- **Natives Win32-Tray-Symbol** — `Shell_NotifyIconW` + Rechtsklick-Menü
+- **Sprechblasen-Benachrichtigungen** — Bestätigungsaufforderungen und
+  Warteschlangenstatus im Windows Action Center
+- **Pause / Fortsetzen** — Listener über das Tray-Menü umschalten, ohne zu
+  beenden
+- **Letzte URL erneut senden** — die zuletzt kopierte URL mit einem Klick
+  erneut einreihen
+- **Einzelne Binärdatei** — statisch gelinkt, ~1.5 MB, keine DLL-Abhängigkeiten
+
+Ausführliche Installations-, Konfigurations- und CLI-Referenzanleitungen
+findest du im Abschnitt [English](#english).
+
+### Lizenz
+
+MIT. Siehe [LICENSE](./LICENSE).
+
+---
+
+## Español
+
+### Descripción general
+
+`rdl-tray.exe` es una pequeña aplicación nativa de Windows que se empareja
+con el cliente CLI [`rdl`](https://github.com/GHSFS/remote-dl). Mientras que
+la CLI maneja invocaciones explícitas `rdl <url>` desde la terminal,
+`rdl-tray` cubre el caso ambiente: cada vez que copias una URL al
+portapapeles, una notificación pregunta si quieres descargarla en tu
+almacenamiento en la nube.
+
+Ambos binarios comparten la misma configuración en disco
+(`%APPDATA%\rdl\config.json`), así que autenticarse una sola vez con la CLI
+es suficiente para que el tray también funcione.
+
+### Características
+
+- **Detección de URL en portapapeles** — escucha mediante
+  `AddClipboardFormatListener` y extrae la primera URL `http(s)://`
+- **Icono nativo de bandeja Win32** — `Shell_NotifyIconW` + menú contextual
+- **Notificaciones tipo globo** — solicitudes de confirmación y estado de la
+  cola en el Centro de Acciones de Windows
+- **Pausar / reanudar** — alternar el listener desde el menú sin salir
+- **Reenviar la última URL** — volver a encolar la URL copiada anteriormente
+  con un solo clic
+- **Binario único** — enlazado estáticamente, ~1.5 MB, sin dependencias DLL
+
+Para instrucciones completas de instalación, configuración y referencia de
+CLI, consulta la sección [English](#english).
+
+### Licencia
+
+MIT. Consulta [LICENSE](./LICENSE).
+
+---
+
+## Português
+
+### Visão geral
+
+`rdl-tray.exe` é um pequeno aplicativo nativo do Windows que faz par com o
+cliente CLI [`rdl`](https://github.com/GHSFS/remote-dl). Enquanto a CLI lida
+com invocações explícitas `rdl <url>` no terminal, o `rdl-tray` cobre o caso
+ambiente: sempre que você copia uma URL para a área de transferência, uma
+notificação pergunta se deseja baixá-la para seu armazenamento em nuvem.
+
+Ambos os binários compartilham o mesmo arquivo de configuração em disco
+(`%APPDATA%\rdl\config.json`), portanto autenticar-se uma vez pela CLI já é
+suficiente para que o tray também funcione.
+
+### Recursos
+
+- **Detecção de URL na área de transferência** — escuta via
+  `AddClipboardFormatListener` e extrai a primeira URL `http(s)://`
+- **Ícone nativo Win32 na bandeja** — `Shell_NotifyIconW` + menu de clique
+  direito
+- **Notificações em balão** — solicitações de confirmação e status da fila
+  na Central de Ações do Windows
+- **Pausar / retomar** — alternar o listener pelo menu da bandeja sem sair
+- **Reenviar a última URL** — recolocar a URL copiada anteriormente na fila
+  com um clique
+- **Binário único** — linkado estaticamente, ~1.5 MB, sem dependências de DLL
+
+Para instruções completas de instalação, configuração e referência da CLI,
+consulte a seção [English](#english).
+
+### Licença
+
+MIT. Veja [LICENSE](./LICENSE).
