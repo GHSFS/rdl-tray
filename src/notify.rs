@@ -37,7 +37,7 @@ fn show(hwnd: HWND, title: &str, message: &str, icon: NOTIFY_ICON_INFOTIP_FLAGS)
         data.szInfo[..n_msg].copy_from_slice(&msg_w[..n_msg]);
         data.dwInfoFlags = icon;
 
-        let _ = Shell_NotifyIconW(NIM_MODIFY, &mut data);
+        let _ = Shell_NotifyIconW(NIM_MODIFY, &data);
     }
 }
 

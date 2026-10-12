@@ -47,7 +47,8 @@ pub fn queue(cfg: &Config, url: &str) -> Result<JobRef> {
             _ => Error::Http(format!("unexpected status {status}")),
         });
     }
-    resp.json::<JobRef>().map_err(|e| Error::Http(e.to_string()))
+    resp.json::<JobRef>()
+        .map_err(|e| Error::Http(e.to_string()))
 }
 
 /// Open the configured worker's web UI in the default browser.

@@ -6,8 +6,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod clipboard;
 mod client;
+mod clipboard;
 mod config;
 mod error;
 mod notify;
@@ -84,11 +84,7 @@ fn main() -> Result<()> {
         tray::install(hwnd, WM_TRAY_ICON)?;
         clipboard::start_listening(hwnd)?;
 
-        notify::balloon(
-            hwnd,
-            "rdl-tray",
-            "Watching clipboard for download URLs.",
-        );
+        notify::balloon(hwnd, "rdl-tray", "Watching clipboard for download URLs.");
 
         let mut msg = MSG::default();
         loop {
@@ -134,11 +130,7 @@ unsafe extern "system" fn window_proc(
                     }
                     s.pending_url = Some(url.clone());
                     s.last_url = Some(url.clone());
-                    notify::balloon_with_action(
-                        hwnd,
-                        "Send to remote-dl?",
-                        &truncate(&url, 80),
-                    );
+                    notify::balloon_with_action(hwnd, "Send to remote-dl?", &truncate(&url, 80));
                 });
             }
             LRESULT(0)
@@ -165,7 +157,12 @@ unsafe fn show_tray_menu(hwnd: HWND) {
             wide("Resume clipboard watch")
         }
     });
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_OPEN as usize, PCWSTR(wide("Open web UI").as_ptr()));
+    let _ = AppendMenuW(
+        menu,
+        MF_STRING,
+        ID_TRAY_OPEN as usize,
+        PCWSTR(wide("Open web UI").as_ptr()),
+    );
     let _ = AppendMenuW(
         menu,
         MF_STRING,
@@ -179,7 +176,12 @@ unsafe fn show_tray_menu(hwnd: HWND) {
         PCWSTR(watching_label.as_ptr()),
     );
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_QUIT as usize, PCWSTR(wide("Quit").as_ptr()));
+    let _ = AppendMenuW(
+        menu,
+        MF_STRING,
+        ID_TRAY_QUIT as usize,
+        PCWSTR(wide("Quit").as_ptr()),
+    );
 
     let mut pt = windows::Win32::Foundation::POINT::default();
     let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);

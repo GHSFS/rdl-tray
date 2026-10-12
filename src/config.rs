@@ -58,21 +58,21 @@ impl Config {
 mod dpapi {
     use super::{Error, Result, B64};
     use base64::Engine as _;
-    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
 
     pub fn unprotect(encoded: &str) -> Result<String> {
         let mut bytes = B64
             .decode(encoded)
             .map_err(|e| Error::Config(format!("invalid token encoding: {e}")))?;
-        let mut input = CRYPT_INTEGER_BLOB {
+        let input = CRYPT_INTEGER_BLOB {
             cbData: bytes.len() as u32,
             pbData: bytes.as_mut_ptr(),
         };
         let mut output = CRYPT_INTEGER_BLOB::default();
 
         unsafe {
-            CryptUnprotectData(&mut input, None, None, None, None, 0, &mut output)
+            CryptUnprotectData(&input, None, None, None, None, 0, &mut output)
                 .map_err(|e| Error::Config(format!("DPAPI unprotect: {e}")))?;
             let plain = std::slice::from_raw_parts(output.pbData, output.cbData as usize);
             let s = String::from_utf8_lossy(plain).into_owned();

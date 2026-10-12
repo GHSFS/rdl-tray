@@ -3,6 +3,7 @@
 > System tray companion for [remote-dl](https://github.com/GHSFS/remote-dl) — sits in the notification area, watches the clipboard for download URLs, and queues them with one click.
 
 [![Build](https://github.com/GHSFS/rdl-tray/actions/workflows/build.yml/badge.svg)](https://github.com/GHSFS/rdl-tray/actions/workflows/build.yml)
+[![Tests](https://github.com/GHSFS/rdl-tray/actions/workflows/test.yml/badge.svg)](https://github.com/GHSFS/rdl-tray/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue)](#installation)
 
@@ -263,6 +264,50 @@ rdl-tray/
                                    │  + 벌룬 프롬프트     │
                                    └──────────────────────┘
 ```
+
+### 호환성
+
+| 항목 | 지원 사양 |
+|---|---|
+| 운영체제 | Windows 10 1809+ 및 Windows 11 (PerMonitorV2 매니페스트 적용) |
+| 아키텍처 | x86_64 전용 |
+| Rust 툴체인 | 1.75+ (`rust-toolchain.toml`에서 stable 고정) |
+| 링커 | MSVC (Visual Studio Build Tools 2022) |
+
+배포 바이너리는 MSVC 런타임을 정적 링크(`+crt-static`)하므로 Windows 기본 시스템 DLL(`KERNEL32.DLL`, `USER32.DLL`, `SHELL32.DLL`, `ADVAPI32.DLL`, `CRYPT32.DLL`, `WS2_32.DLL`) 외에 별도의 외부 DLL 의존성이 없습니다.
+
+### 보안 고려사항
+
+- **저장 시 토큰 암호화** — Bearer 토큰은 Windows DPAPI(`CryptProtectData`)로 암호화되어 저장되며, 생성한 Windows 사용자 세션에서만 복호화할 수 있습니다.
+- **전송 구간 암호화** — `reqwest`는 `https_only=true`로 설정되어 평문 HTTP 리다이렉트를 거부하며 토큰은 TLS `Authorization` 헤더로만 전송됩니다.
+- **텔레메트리 및 자동 업데이트 없음** — 설정된 워커 URL 외의 외부 통신이나 백그라운드 업데이터가 일절 없습니다.
+- **콘솔 창 비노출** — `windows_subsystem = "windows"`로 빌드되어 콘솔 창을 통한 정보 노출이 없습니다.
+
+### 문제 해결
+
+| 증상 | 주요 원인 | 해결 방법 |
+|---|---|---|
+| `config not found` 벌룬 알림 | `rdl auth login` 미실행 | 터미널에서 `rdl auth login --token <토큰>` 1회 실행 |
+| `server rejected credentials (401)` | 토큰 폐기 또는 만료 | 텔레그램 봇에서 새 토큰 발급 후 재로그인 |
+| 트레이 아이콘 미표시 | 동일 `uID`를 점유한 기존 프로세스 존재 | 작업 관리자에서 잔류 `rdl-tray.exe` 종료 후 재실행 |
+| 클립보드 복사 시 알림 미표시 | 클립보드 리스너 등록 실패 | 트레이 메뉴에서 Pause / Resume 토글 또는 앱 재시작 |
+
+### 기여하기
+
+PR 제출 전 아래 세 가지 검사를 통과해야 합니다:
+
+```bash
+cargo fmt
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
+```
+
+### 감사의 글
+
+- [`windows`](https://crates.io/crates/windows) — 공식 Win32 바인딩 (`Shell_NotifyIconW`, `AddClipboardFormatListener`, `CryptProtectData`)
+- [`reqwest`](https://crates.io/crates/reqwest) + [`rustls`](https://crates.io/crates/rustls) — TLS 전용 HTTP 클라이언트
+- [`directories`](https://crates.io/crates/directories) — `%APPDATA%\rdl\config.json` 경로 탐색
+- [`embed-resource`](https://crates.io/crates/embed-resource) — Win32 매니페스트 PE 임베딩
 
 ### 설치
 

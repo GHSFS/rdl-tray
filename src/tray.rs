@@ -29,27 +29,27 @@ unsafe fn make_tray_data(hwnd: HWND, callback_msg: u32) -> NOTIFYICONDATAW {
 pub fn install(hwnd: HWND, callback_msg: u32) -> Result<()> {
     unsafe {
         let mut data = make_tray_data(hwnd, callback_msg);
-        if !Shell_NotifyIconW(NIM_ADD, &mut data).as_bool() {
+        if !Shell_NotifyIconW(NIM_ADD, &data).as_bool() {
             return Err(crate::error::Error::Win32(
                 "Shell_NotifyIconW(NIM_ADD) failed".into(),
             ));
         }
         // Request modern (Vista+) version semantics.
         data.Anonymous.uVersion = NOTIFYICON_VERSION_4;
-        let _ = Shell_NotifyIconW(NIM_SETVERSION, &mut data);
+        let _ = Shell_NotifyIconW(NIM_SETVERSION, &data);
     }
     Ok(())
 }
 
 pub fn remove(hwnd: HWND) {
     unsafe {
-        let mut data = NOTIFYICONDATAW {
+        let data = NOTIFYICONDATAW {
             cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
             uID: TRAY_UID,
             ..Default::default()
         };
-        let _ = Shell_NotifyIconW(NIM_DELETE, &mut data);
+        let _ = Shell_NotifyIconW(NIM_DELETE, &data);
     }
 }
 
