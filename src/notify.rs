@@ -13,6 +13,10 @@ pub fn balloon(hwnd: HWND, title: &str, message: &str) {
     show(hwnd, title, message, NIIF_INFO);
 }
 
+pub fn balloon_error(hwnd: HWND, title: &str, message: &str) {
+    show(hwnd, title, message, NIIF_ERROR);
+}
+
 pub fn balloon_with_action(hwnd: HWND, title: &str, message: &str) {
     // Reuse the same balloon machinery; the click action is delivered via
     // tray icon callback (NIN_BALLOONUSERCLICK) and handled in the window

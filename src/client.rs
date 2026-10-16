@@ -5,9 +5,22 @@ use crate::config::Config;
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 const USER_AGENT: &str = concat!("rdl-tray/", env!("CARGO_PKG_VERSION"));
+
+static HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+
+fn get_client() -> &'static reqwest::blocking::Client {
+    HTTP_CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new())
+    })
+}
 
 #[derive(Debug, Deserialize)]
 pub struct JobRef {
@@ -22,12 +35,7 @@ struct QueueRequest<'a> {
 }
 
 pub fn queue(cfg: &Config, url: &str) -> Result<JobRef> {
-    let http = reqwest::blocking::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(Duration::from_secs(30))
-        .https_only(true)
-        .build()
-        .map_err(|e| Error::Http(e.to_string()))?;
+    let http = get_client();
 
     let body = QueueRequest {
         url,

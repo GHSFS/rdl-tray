@@ -27,13 +27,22 @@ for the tray to work too.
 
 ### Features
 
-- **Clipboard URL detection** — listens with `AddClipboardFormatListener` and
-  matches the first `http(s)://` URL in the new contents.
+- **Clipboard URL & magnet detection** — listens with `AddClipboardFormatListener` and
+  matches the first `http(s)://` or `magnet:?xt=...` link in the new contents.
+- **Interactive balloon click** — click the balloon notification (`NIN_BALLOONUSERCLICK`)
+  to immediately queue the detected download target.
+- **Async non-blocking queueing** — background worker thread dispatches requests
+  without ever freezing the Win32 message loop or tray icon.
+- **Single-instance protection** — named Win32 mutex prevents duplicate processes,
+  orphaned icons, and duplicate clipboard events.
+- **Start with Windows** — toggle automatic startup on logon directly from the tray
+  context menu (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+- **Connection pooling** — cached HTTP client eliminates per-request TLS handshake latency.
 - **Native Win32 tray icon** — `Shell_NotifyIconW` with a right-click menu;
-  no GUI framework, no extra runtime dependencies.
-- **Balloon notifications** — confirmation prompts and queue status surface as
-  Windows action-center balloons.
-- **Pause / resume** — toggle the listener from the tray menu without exiting.
+  no heavy GUI framework, no extra runtime dependencies.
+- **Balloon notifications** — confirmation prompts, job receipts, and error alerts surface
+  as native Windows action-center balloons.
+- **Pause / resume** — toggle the clipboard listener from the tray menu without exiting.
 - **Send last URL** — re-queue the previously copied URL with one click.
 - **Single binary** — statically linked, ~1.5 MB, no DLLs to ship.
 - **Per-Monitor DPI v2 manifest** — sharp rendering on mixed-DPI setups.
@@ -45,7 +54,7 @@ for the tray to work too.
 │  Windows clipboard     │ change  │  rdl-tray.exe        │  HTTPS  │  Edge worker     │
 │  (any source app)      │ ───────▶│  (hidden window)     │ ───────▶│  /api/dl         │
 └────────────────────────┘         │  Shell_NotifyIconW   │         └──────────────────┘
-                                   │  + balloon prompt    │
+                                   │  + balloon click     │
                                    └──────────────────────┘
 ```
 
@@ -65,13 +74,14 @@ rdl-tray/
 ├── src/
 │   ├── main.rs                Hidden top-level window + Win32 message loop;
 │   │                          dispatches WM_TRAY_ICON, WM_CLIPBOARDUPDATE,
-│   │                          WM_COMMAND
+│   │                          WM_COMMAND, NIN_BALLOONUSERCLICK, async queues
+│   ├── autostart.rs           Windows logon autostart registry management
 │   ├── tray.rs                Shell_NotifyIconW lifecycle (NIM_ADD /
 │   │                          NIM_SETVERSION / NIM_DELETE)
-│   ├── clipboard.rs           AddClipboardFormatListener subscription, CF_UNICODETEXT
-│   │                          read, regex-based URL extraction with unit tests
-│   ├── notify.rs              Balloon notifications via NIM_MODIFY + NIF_INFO
-│   ├── client.rs              reqwest::blocking client; POST /api/dl with
+│   ├── clipboard.rs           AddClipboardFormatListener subscription, bounded
+│   │                          CF_UNICODETEXT read, URL/magnet regex extraction
+│   ├── notify.rs              Balloon notifications via NIM_MODIFY + NIF_INFO / NIF_ERROR
+│   ├── client.rs              Pooled reqwest client; POST /api/dl with
 │   │                          DPAPI-decrypted bearer token
 │   ├── config.rs              Config load + DPAPI unprotect for the persisted
 │   │                          token (shared with rdl CLI)
@@ -223,15 +233,23 @@ URL을 복사할 때마다 알림으로 "받을까요?" 묻습니다.
 
 ### 특징
 
-- **클립보드 URL 감지** — `AddClipboardFormatListener`로 변경 이벤트를 받고
-  새 내용에서 첫 `http(s)://` URL을 추출
+- **클립보드 URL 및 마그넷 감지** — `AddClipboardFormatListener`로 변경 이벤트를 받고
+  새 내용에서 첫 `http(s)://` 또는 `magnet:?xt=...` 링크를 즉시 추출
+- **대화형 벌룬 클릭 지원** — 알림창 클릭(`NIN_BALLOONUSERCLICK`)으로 다운로드 즉시 실행
+- **비동기 논블로킹 큐잉** — 백그라운드 워커 스레드로 네트워크 I/O를 격리하여
+  서버 지연 중에도 트레이 및 메시지 루프 프리징 0%
+- **단일 인스턴스 보호 (Named Mutex)** — 중복 실행을 방지하여 트레이 아이콘과
+  클립보드 리스너의 충돌 원천 차단
+- **Windows 시작 시 자동 실행** — 트레이 메뉴에서 간편하게 시작프로그램 등록/해제
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **HTTP 커넥션 풀링** — `OnceLock` 캐싱으로 TLS 핸드셰이크 지연시간 최소화
 - **네이티브 Win32 트레이 아이콘** — `Shell_NotifyIconW` + 우클릭 메뉴.
-  별도의 GUI 프레임워크 없음
-- **벌룬 알림** — 확인 프롬프트와 큐잉 결과를 Windows 액션 센터 벌룬으로 표시
-- **일시정지 / 재개** — 트레이 메뉴에서 종료 없이 리스너 토글
+  별도의 무거운 프레임워크나 런타임 의존성 0
+- **벌룬 알림** — 확인 프롬프트, 작업 접수 번호, 오류 안내를 Windows 액션 센터 벌룬으로 표시
+- **일시정지 / 재개** — 트레이 메뉴에서 프로그램 종료 없이 클립보드 감시 토글
 - **마지막 URL 재전송** — 직전에 복사한 URL을 한 번 클릭으로 다시 큐잉
 - **단일 바이너리** — 정적 링크, 약 1.5 MB, DLL 의존성 0
-- **Per-Monitor DPI v2 매니페스트** — 혼합 DPI 환경에서 선명하게 렌더링
+- **Per-Monitor DPI v2 매니페스트** — 혼합 DPI 다중 모니터 환경에서 선명하게 렌더링
 
 ### 프로젝트 구조
 
@@ -242,11 +260,12 @@ rdl-tray/
 ├── .cargo/config.toml      빌드 타겟 + 링커 플래그 (정적 CRT)
 ├── build.rs                Win32 매니페스트 + 버전 정보 임베드
 ├── src/
-│   ├── main.rs             히든 윈도우 + Win32 메시지 루프
+│   ├── main.rs             히든 윈도우 + Win32 메시지 루프, 알림 클릭 및 비동기 디스패치
+│   ├── autostart.rs        Windows 시작프로그램 레지스트리 관리
 │   ├── tray.rs             Shell_NotifyIconW 라이프사이클 관리
-│   ├── clipboard.rs        AddClipboardFormatListener + URL 추출
-│   ├── notify.rs           NIM_MODIFY + NIF_INFO 기반 벌룬 알림
-│   ├── client.rs           reqwest::blocking 클라이언트, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + 메모리 안전 URL/마그넷 추출
+│   ├── notify.rs           NIM_MODIFY 기반 정보/에러 벌룬 알림
+│   ├── client.rs           풀링된 reqwest 클라이언트, POST /api/dl
 │   ├── config.rs           설정 로드 + DPAPI 토큰 복호화
 │   └── error.rs            크레이트 전체 에러 타입
 ├── tests/integration.rs    assert_cmd 기반 스모크 테스트
@@ -261,7 +280,7 @@ rdl-tray/
 │  Windows 클립보드      │  변경   │  rdl-tray.exe        │  HTTPS  │  엣지 워커       │
 │  (어떤 앱이든)         │ ───────▶│  (히든 윈도우)       │ ───────▶│  /api/dl         │
 └────────────────────────┘         │  Shell_NotifyIconW   │         └──────────────────┘
-                                   │  + 벌룬 프롬프트     │
+                                   │  + 벌룬 클릭 즉시실행│
                                    └──────────────────────┘
 ```
 
@@ -372,10 +391,15 @@ MIT. [LICENSE](./LICENSE) 참고.
 
 ### 特徴
 
-- **クリップボード URL 検出** — `AddClipboardFormatListener` で変更を購読し、
-  最初の `http(s)://` URL を抽出
+- **クリップボード URL & Magnet 検出** — `AddClipboardFormatListener` で変更を購読し、
+  最初の `http(s)://` または `magnet:?xt=...` リンクを抽出
+- **対話型バルーンクリック** — 通知バルーンのクリック(`NIN_BALLOONUSERCLICK`)で即座にキューへ送信
+- **非同期ノンブロッキングキューイング** — バックグラウンドスレッドで通信し、UIのフリーズを完全排除
+- **多重起動防止 (Named Mutex)** — トレイアイコンの重複やクリップボードイベント競合を防止
+- **Windows 起動時自動実行** — トレイメニューからスタートアップ登録/解除を切り替え
+- **HTTP コネクションプーリング** — `OnceLock` による TLS ハンドシェイクオーバーヘッド削減
 - **ネイティブ Win32 トレイアイコン** — `Shell_NotifyIconW` + 右クリックメニュー
-- **バルーン通知** — 確認プロンプトとキュー結果を Windows アクションセンターに表示
+- **バルーン通知** — 確認プロンプト、ジョブ受付、エラー通知をアクションセンターに表示
 - **一時停止 / 再開** — トレイメニューから終了せずにリスナーを切り替え
 - **直近 URL の再送信** — 直前にコピーした URL をワンクリックで再キュー
 - **単一バイナリ** — 静的リンク、約 1.5 MB、DLL 依存なし
@@ -389,11 +413,12 @@ rdl-tray/
 ├── .cargo/config.toml      ビルドターゲット + リンカフラグ (静的 CRT)
 ├── build.rs                Win32 マニフェスト + バージョン情報の埋め込み
 ├── src/
-│   ├── main.rs             非表示ウィンドウ + Win32 メッセージループ
+│   ├── main.rs             非表示ウィンドウ + Win32 メッセージループ、クリック＆非同期キュー
+│   ├── autostart.rs        Windows スタートアップレジストリ管理
 │   ├── tray.rs             Shell_NotifyIconW のライフサイクル管理
-│   ├── clipboard.rs        AddClipboardFormatListener + URL 抽出
-│   ├── notify.rs           NIM_MODIFY + NIF_INFO によるバルーン通知
-│   ├── client.rs           reqwest::blocking クライアント、POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + 安全な URL/Magnet 抽出
+│   ├── notify.rs           NIM_MODIFY による情報/エラーバルーン通知
+│   ├── client.rs           プールされた reqwest クライアント、POST /api/dl
 │   ├── config.rs           設定読み込み + DPAPI でのトークン復号
 │   └── error.rs            クレート全体のエラー型
 ├── tests/integration.rs    assert_cmd によるスモークテスト
@@ -424,10 +449,15 @@ MIT。[LICENSE](./LICENSE) を参照。
 
 ### 特性
 
-- **剪贴板 URL 检测** — 使用 `AddClipboardFormatListener` 监听变化,提取第一个
-  `http(s)://` URL
-- **原生 Win32 托盘图标** — `Shell_NotifyIconW` + 右键菜单
-- **气泡通知** — 在 Windows 操作中心显示确认提示和队列状态
+- **剪贴板 URL 及 Magnet 链接检测** — 使用 `AddClipboardFormatListener` 监听变化,提取第一个
+  `http(s)://` 或 `magnet:?xt=...` 链接
+- **交互式气泡点击** — 直接点击气泡通知(`NIN_BALLOONUSERCLICK`)即可立即派发下载任务
+- **异步非阻塞排队** — 后台工作线程处理网络请求,彻底杜绝界面卡顿与无响应
+- **防多开保护 (Named Mutex)** — 命名互斥体防止重复运行,杜绝多图标与重复剪贴板监听
+- **随 Windows 开机自启** — 托盘右键菜单直接开关自启动注册表项
+- **HTTP 连接池** — `OnceLock` 缓存客户端,消除重复建立 TLS 握手的开销
+- **原生 Win32 托盘图标** — `Shell_NotifyIconW` + 右键菜单,无厚重 GUI 框架
+- **气泡通知** — 在 Windows 操作中心显示确认提示、任务编号及错误通知
 - **暂停 / 恢复** — 通过托盘菜单切换监听器,无需退出
 - **重新发送上一个 URL** — 一键重新加入最近复制的 URL
 - **单一二进制** — 静态链接,约 1.5 MB,无 DLL 依赖
@@ -441,11 +471,12 @@ rdl-tray/
 ├── .cargo/config.toml      构建目标 + 链接器标志 (静态 CRT)
 ├── build.rs                嵌入 Win32 清单 + 版本信息
 ├── src/
-│   ├── main.rs             隐藏窗口 + Win32 消息循环
+│   ├── main.rs             隐藏窗口 + Win32 消息循环,支持通知点击与异步排队
+│   ├── autostart.rs        Windows 自启注册表管理
 │   ├── tray.rs             Shell_NotifyIconW 生命周期管理
-│   ├── clipboard.rs        AddClipboardFormatListener + URL 提取
-│   ├── notify.rs           通过 NIM_MODIFY + NIF_INFO 的气泡通知
-│   ├── client.rs           reqwest::blocking 客户端,POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + 内存安全 URL/Magnet 提取
+│   ├── notify.rs           基于 NIM_MODIFY 的信息/错误气泡通知
+│   ├── client.rs           复用连接池的 reqwest 客户端,POST /api/dl
 │   ├── config.rs           配置加载 + DPAPI 解密令牌
 │   └── error.rs            crate 范围的错误类型
 ├── tests/integration.rs    基于 assert_cmd 的冒烟测试
@@ -477,11 +508,20 @@ MIT。详见 [LICENSE](./LICENSE)。
 
 ### Возможности
 
-- **Обнаружение URL в буфере обмена** — слушатель `AddClipboardFormatListener`
-  и извлечение первого `http(s)://` URL
+- **Обнаружение URL и Magnet-ссылок** — слушатель `AddClipboardFormatListener`
+  и извлечение первого `http(s)://` или `magnet:?xt=...`
+- **Интерактивный клик по уведомлению** — клик по всплывающему балуну
+  (`NIN_BALLOONUSERCLICK`) для мгновенной отправки в очередь
+- **Асинхронная неблокирующая отправка** — фоновый поток полностью исключает
+  зависания интерфейса и значка трея
+- **Защита от повторного запуска (Named Mutex)** — предотвращает появление
+  лишних иконок и дублирование событий буфера
+- **Автозапуск с Windows** — переключение автозапуска в меню трея
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **Пул HTTP-соединений** — кэширование клиента (`OnceLock`) устраняет задержки TLS
 - **Нативная иконка в области уведомлений Win32** — `Shell_NotifyIconW`
   с контекстным меню по правому клику
-- **Всплывающие уведомления** — подтверждения и статус очереди в Центре
+- **Всплывающие уведомления** — подтверждения, номера задач и ошибки в Центре
   уведомлений Windows
 - **Пауза / возобновление** — переключение слушателя из меню трея без выхода
 - **Повторная отправка последнего URL** — повторная постановка в очередь
@@ -497,11 +537,12 @@ rdl-tray/
 ├── .cargo/config.toml      Цель сборки + флаги компоновщика (статическая CRT)
 ├── build.rs                Встраивание манифеста Win32 + информации о версии
 ├── src/
-│   ├── main.rs             Скрытое окно + цикл сообщений Win32
+│   ├── main.rs             Скрытое окно + цикл сообщений Win32, клики по уведомлениям и асинхрон
+│   ├── autostart.rs        Управление автозапуском через реестр Windows
 │   ├── tray.rs             Управление жизненным циклом Shell_NotifyIconW
-│   ├── clipboard.rs        AddClipboardFormatListener + извлечение URL
-│   ├── notify.rs           Всплывающие уведомления через NIM_MODIFY + NIF_INFO
-│   ├── client.rs           reqwest::blocking клиент, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + безопасное извлечение URL/Magnet
+│   ├── notify.rs           Всплывающие уведомления через NIM_MODIFY (инфо / ошибки)
+│   ├── client.rs           Пул reqwest клиентов, POST /api/dl
 │   ├── config.rs           Загрузка конфигурации + расшифровка токена через DPAPI
 │   └── error.rs            Тип ошибки уровня крейта
 ├── tests/integration.rs    Smoke-тесты на основе assert_cmd
@@ -534,11 +575,19 @@ tray cũng hoạt động.
 
 ### Tính năng
 
-- **Phát hiện URL từ clipboard** — lắng nghe qua `AddClipboardFormatListener`
-  và trích xuất URL `http(s)://` đầu tiên
+- **Phát hiện URL & Magnet từ clipboard** — lắng nghe qua `AddClipboardFormatListener`
+  và trích xuất link `http(s)://` hoặc `magnet:?xt=...` đầu tiên
+- **Nhấp vào thông báo bóng tương tác** — nhấp vào bóng (`NIN_BALLOONUSERCLICK`)
+  để ngay lập tức đưa tác vụ vào hàng đợi
+- **Hàng đợi bất đồng bộ không đơ giao diện** — luồng nền xử lý mạng giúp tray
+  không bao giờ bị giật lag
+- **Chống chạy trùng (Named Mutex)** — bảo đảm chỉ một tiến trình chạy, loại bỏ
+  biểu tượng rác và trùng lặp sự kiện
+- **Khởi động cùng Windows** — bật/tắt tự khởi động ngay trong menu chuột phải
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **Tái sử dụng kết nối HTTP** — `OnceLock` giảm thiểu độ trễ bắt tay TLS
 - **Biểu tượng tray Win32 native** — `Shell_NotifyIconW` + menu chuột phải
-- **Thông báo bóng** — lời nhắc xác nhận và trạng thái hàng đợi trong Action
-  Center của Windows
+- **Thông báo bóng** — lời nhắc xác nhận, mã công việc và thông báo lỗi
 - **Tạm dừng / tiếp tục** — bật/tắt listener từ menu tray mà không cần thoát
 - **Gửi lại URL cuối cùng** — đưa lại URL vừa sao chép vào hàng đợi với một
   cú click
@@ -553,11 +602,12 @@ rdl-tray/
 ├── .cargo/config.toml      Mục tiêu build + cờ linker (CRT tĩnh)
 ├── build.rs                Nhúng manifest Win32 + thông tin phiên bản
 ├── src/
-│   ├── main.rs             Cửa sổ ẩn + vòng lặp message Win32
+│   ├── main.rs             Cửa sổ ẩn + vòng lặp Win32, nhấp thông báo & hàng đợi async
+│   ├── autostart.rs        Quản lý tự khởi động qua registry Windows
 │   ├── tray.rs             Quản lý vòng đời Shell_NotifyIconW
-│   ├── clipboard.rs        AddClipboardFormatListener + trích xuất URL
-│   ├── notify.rs           Thông báo bóng qua NIM_MODIFY + NIF_INFO
-│   ├── client.rs           Client reqwest::blocking, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + trích xuất an toàn URL/Magnet
+│   ├── notify.rs           Thông báo bóng qua NIM_MODIFY (thông tin / lỗi)
+│   ├── client.rs           Client reqwest tái sử dụng kết nối, POST /api/dl
 │   ├── config.rs           Tải cấu hình + giải mã token DPAPI
 │   └── error.rs            Kiểu lỗi của crate
 ├── tests/integration.rs    Kiểm thử smoke dựa trên assert_cmd
@@ -590,11 +640,20 @@ kimlik doğrulaması yapmak tepsi için de yeterlidir.
 
 ### Özellikler
 
-- **Pano URL algılama** — `AddClipboardFormatListener` ile değişiklikleri
-  dinler ve içerikten ilk `http(s)://` URL'sini çıkarır
+- **Pano URL & Magnet algılama** — `AddClipboardFormatListener` ile değişiklikleri
+  dinler ve ilk `http(s)://` veya `magnet:?xt=...` bağlantısını çıkarır
+- **Etkileşimli balon tıklaması** — bildirime tıklayarak (`NIN_BALLOONUSERCLICK`)
+  indirme görevini anında kuyruğa gönderin
+- **Arayüzü dondurmayan asenkron kuyruk** — arka plan iş parçacığı sayesinde
+  ağ gecikmelerinde tepsi asla donmaz
+- **Çoklu başlatma koruması (Named Mutex)** — yinelenen simgeleri ve çakışan
+  pano dinleyicilerini engeller
+- **Windows ile başlatma** — tepsi sağ tık menüsünden başlangıç kaydını
+  kolayca açıp kapatın (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **HTTP bağlantı havuzu** — `OnceLock` ile TLS el sıkışma gecikmesini sıfıra indirir
 - **Yerel Win32 sistem tepsisi simgesi** — `Shell_NotifyIconW` + sağ tık menüsü
-- **Balon bildirimleri** — onay istemleri ve kuyruk durumu Windows Eylem
-  Merkezi'nde gösterilir
+- **Balon bildirimleri** — onay istemleri, iş kimlikleri ve hata bildirimleri
+  Windows Eylem Merkezi'nde gösterilir
 - **Duraklat / devam ettir** — uygulamayı kapatmadan tepsi menüsünden
   dinleyiciyi açıp kapatın
 - **Son URL'yi tekrar gönder** — son kopyalanan URL'yi tek tıkla yeniden
@@ -610,11 +669,12 @@ rdl-tray/
 ├── .cargo/config.toml      Derleme hedefi + bağlayıcı bayrakları (statik CRT)
 ├── build.rs                Win32 manifest + sürüm bilgisi gömme
 ├── src/
-│   ├── main.rs             Gizli pencere + Win32 mesaj döngüsü
+│   ├── main.rs             Gizli pencere + Win32 mesaj döngüsü, bildirim tıklama ve asenkron kuyruk
+│   ├── autostart.rs        Windows başlangıç kayıt defteri yönetimi
 │   ├── tray.rs             Shell_NotifyIconW yaşam döngüsü yönetimi
-│   ├── clipboard.rs        AddClipboardFormatListener + URL çıkarma
-│   ├── notify.rs           NIM_MODIFY + NIF_INFO ile balon bildirimleri
-│   ├── client.rs           reqwest::blocking istemcisi, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + güvenli URL/Magnet çıkarma
+│   ├── notify.rs           NIM_MODIFY ile bilgi/hata balon bildirimleri
+│   ├── client.rs           Havuzlanmış reqwest istemcisi, POST /api/dl
 │   ├── config.rs           Yapılandırma yükleme + DPAPI ile token çözme
 │   └── error.rs            Crate genelinde hata türü
 ├── tests/integration.rs    assert_cmd tabanlı smoke testler
@@ -648,15 +708,21 @@ die CLI ausreicht, damit auch das Tray funktioniert.
 
 ### Funktionen
 
-- **URL-Erkennung in der Zwischenablage** — hört über
-  `AddClipboardFormatListener` mit und extrahiert die erste `http(s)://`-URL
+- **Zwischenablage-URL- & Magnet-Erkennung** — hört über
+  `AddClipboardFormatListener` mit und extrahiert die erste `http(s)://`- oder `magnet:?xt=...`-URL
+- **Interaktiver Sprechblasen-Klick** — Klick auf die Benachrichtigung
+  (`NIN_BALLOONUSERCLICK`) reiht den Download sofort ein
+- **Asynchrones, blockierungsfreies Einreihen** — Hintergrund-Worker verhindert
+  jegliches Einfrieren der Windows-Nachrichtenschleife
+- **Schutz vor Mehrfachinstanzen (Named Mutex)** — verhindert doppelte Icons und
+  Zwischenablage-Konflikte
+- **Mit Windows starten** — Autostart direkt über das Tray-Kontextmenü umschalten
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **HTTP-Verbindungspooling** — `OnceLock`-Caching minimiert TLS-Verbindungsverzögerungen
 - **Natives Win32-Tray-Symbol** — `Shell_NotifyIconW` + Rechtsklick-Menü
-- **Sprechblasen-Benachrichtigungen** — Bestätigungsaufforderungen und
-  Warteschlangenstatus im Windows Action Center
-- **Pause / Fortsetzen** — Listener über das Tray-Menü umschalten, ohne zu
-  beenden
-- **Letzte URL erneut senden** — die zuletzt kopierte URL mit einem Klick
-  erneut einreihen
+- **Sprechblasen-Benachrichtigungen** — Bestätigungen, Job-IDs und Fehler im Windows Action Center
+- **Pause / Fortsetzen** — Listener über das Tray-Menü umschalten, ohne zu beenden
+- **Letzte URL erneut senden** — die zuletzt kopierte URL mit einem Klick erneut einreihen
 - **Einzelne Binärdatei** — statisch gelinkt, ~1.5 MB, keine DLL-Abhängigkeiten
 
 ### Projektstruktur
@@ -668,11 +734,12 @@ rdl-tray/
 ├── .cargo/config.toml      Build-Ziel + Linker-Flags (statische CRT)
 ├── build.rs                Bettet Win32-Manifest + Versionsinfo ein
 ├── src/
-│   ├── main.rs             Verstecktes Fenster + Win32-Nachrichtenschleife
+│   ├── main.rs             Verstecktes Fenster + Win32-Nachrichtenschleife, Klick-Aktion & Async
+│   ├── autostart.rs        Windows-Autostart-Registrierungsverwaltung
 │   ├── tray.rs             Shell_NotifyIconW-Lebenszyklusverwaltung
-│   ├── clipboard.rs        AddClipboardFormatListener + URL-Extraktion
-│   ├── notify.rs           Sprechblasen-Benachrichtigungen via NIM_MODIFY + NIF_INFO
-│   ├── client.rs           reqwest::blocking-Client, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + speichersichere URL/Magnet-Extraktion
+│   ├── notify.rs           Sprechblasen-Benachrichtigungen via NIM_MODIFY (Info / Fehler)
+│   ├── client.rs           Gepoolter reqwest-Client, POST /api/dl
 │   ├── config.rs           Konfiguration laden + Token via DPAPI entschlüsseln
 │   └── error.rs            Crate-weiter Fehlertyp
 ├── tests/integration.rs    Smoke-Tests basierend auf assert_cmd
@@ -704,16 +771,25 @@ Ambos binarios comparten la misma configuración en disco
 (`%APPDATA%\rdl\config.json`), así que autenticarse una sola vez con la CLI
 es suficiente para que el tray también funcione.
 
-### Características
+#### Características
 
-- **Detección de URL en portapapeles** — escucha mediante
-  `AddClipboardFormatListener` y extrae la primera URL `http(s)://`
+- **Detección de URL y enlaces Magnet** — escucha mediante `AddClipboardFormatListener`
+  y extrae el primer enlace `http(s)://` o `magnet:?xt=...`
+- **Clic interactivo en notificación tipo globo** — haz clic en el globo
+  (`NIN_BALLOONUSERCLICK`) para enviar inmediatamente la descarga a la cola
+- **Encolado asíncrono sin bloqueo** — hilo de trabajo en segundo plano para evitar
+  cualquier congelamiento del bucle de mensajes o del icono
+- **Protección de instancia única (Named Mutex)** — previene duplicados, iconos huérfanos
+  y colisiones de eventos del portapapeles
+- **Iniciar con Windows** — conmutador en el menú contextual del tray para autoinicio
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **Reutilización de conexiones HTTP** — cliente en caché (`OnceLock`) que elimina la
+  latencia de negociación TLS
 - **Icono nativo de bandeja Win32** — `Shell_NotifyIconW` + menú contextual
-- **Notificaciones tipo globo** — solicitudes de confirmación y estado de la
-  cola en el Centro de Acciones de Windows
+- **Notificaciones tipo globo** — confirmaciones, ID de trabajos y errores en el
+  Centro de Acciones de Windows
 - **Pausar / reanudar** — alternar el listener desde el menú sin salir
-- **Reenviar la última URL** — volver a encolar la URL copiada anteriormente
-  con un solo clic
+- **Reenviar la última URL** — volver a encolar la URL copiada anteriormente con un solo clic
 - **Binario único** — enlazado estáticamente, ~1.5 MB, sin dependencias DLL
 
 ### Estructura del proyecto
@@ -725,11 +801,12 @@ rdl-tray/
 ├── .cargo/config.toml      Destino de compilación + flags del linker (CRT estático)
 ├── build.rs                Incrusta el manifiesto Win32 + información de versión
 ├── src/
-│   ├── main.rs             Ventana oculta + bucle de mensajes Win32
+│   ├── main.rs             Ventana oculta + bucle de mensajes Win32, clic en notificación y colas async
+│   ├── autostart.rs        Gestión del registro de inicio de Windows
 │   ├── tray.rs             Gestión del ciclo de vida de Shell_NotifyIconW
-│   ├── clipboard.rs        AddClipboardFormatListener + extracción de URL
-│   ├── notify.rs           Notificaciones tipo globo vía NIM_MODIFY + NIF_INFO
-│   ├── client.rs           Cliente reqwest::blocking, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + extracción segura de URL/Magnet
+│   ├── notify.rs           Notificaciones tipo globo vía NIM_MODIFY (info / error)
+│   ├── client.rs           Cliente reqwest con pool de conexiones, POST /api/dl
 │   ├── config.rs           Carga de configuración + descifrado del token DPAPI
 │   └── error.rs            Tipo de error del crate
 ├── tests/integration.rs    Pruebas smoke basadas en assert_cmd
@@ -762,15 +839,21 @@ suficiente para que o tray também funcione.
 
 ### Recursos
 
-- **Detecção de URL na área de transferência** — escuta via
-  `AddClipboardFormatListener` e extrai a primeira URL `http(s)://`
-- **Ícone nativo Win32 na bandeja** — `Shell_NotifyIconW` + menu de clique
-  direito
-- **Notificações em balão** — solicitações de confirmação e status da fila
-  na Central de Ações do Windows
+- **Detecção de URL e links Magnet** — escuta via `AddClipboardFormatListener`
+  e extrai o primeiro link `http(s)://` ou `magnet:?xt=...`
+- **Clique interativo no balão** — clique na notificação (`NIN_BALLOONUSERCLICK`)
+  para despachar imediatamente o download
+- **Enfileiramento assíncrono sem travamentos** — thread em segundo plano garante
+  zero congelamentos na interface do Windows
+- **Proteção contra múltiplas instâncias (Named Mutex)** — impede processos
+  duplicados e conflitos de listeners
+- **Iniciar com o Windows** — alterne o início automático no logon diretamente pelo menu
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`)
+- **Pool de conexões HTTP** — cliente em cache (`OnceLock`) elimina o overhead de handshake TLS
+- **Ícone nativo Win32 na bandeja** — `Shell_NotifyIconW` + menu de clique direito
+- **Notificações em balão** — solicitações de confirmação, IDs de trabalho e alertas de erro
 - **Pausar / retomar** — alternar o listener pelo menu da bandeja sem sair
-- **Reenviar a última URL** — recolocar a URL copiada anteriormente na fila
-  com um clique
+- **Reenviar a última URL** — recolocar a URL copiada anteriormente na fila com um clique
 - **Binário único** — linkado estaticamente, ~1.5 MB, sem dependências de DLL
 
 ### Estrutura do projeto
@@ -782,13 +865,14 @@ rdl-tray/
 ├── .cargo/config.toml      Alvo de build + flags do linker (CRT estática)
 ├── build.rs                Embute o manifesto Win32 + informação de versão
 ├── src/
-│   ├── main.rs             Janela oculta + loop de mensagens Win32
+│   ├── main.rs             Janela oculta + loop de mensagens Win32, clique no balão e filas async
+│   ├── autostart.rs        Gerenciamento do registro de inicialização do Windows
 │   ├── tray.rs             Gerenciamento do ciclo de vida do Shell_NotifyIconW
-│   ├── clipboard.rs        AddClipboardFormatListener + extração de URL
-│   ├── notify.rs           Notificações em balão via NIM_MODIFY + NIF_INFO
-│   ├── client.rs           Cliente reqwest::blocking, POST /api/dl
+│   ├── clipboard.rs        AddClipboardFormatListener + extração segura de URL/Magnet
+│   ├── notify.rs           Notificações em balão via NIM_MODIFY (info / erro)
+│   ├── client.rs           Cliente reqwest com pool de conexões, POST /api/dl
 │   ├── config.rs           Carga de configuração + descriptografia DPAPI do token
-│   └── error.rs            Tipo de erro do crate
+│   └── error.rs            Tipo de error do crate
 ├── tests/integration.rs    Testes smoke baseados em assert_cmd
 ├── resources/              Script de recursos Win32 + manifesto
 └── .github/workflows/      CI para cargo build + fmt/clippy/test

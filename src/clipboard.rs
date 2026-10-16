@@ -9,7 +9,7 @@ use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, GetClipboardData, OpenClipboard,
     RemoveClipboardFormatListener,
 };
-use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 
 pub const WM_CLIPBOARDUPDATE: u32 = 0x031D;
@@ -27,7 +27,7 @@ pub fn stop_listening(hwnd: HWND) {
 }
 
 /// Reads the current clipboard contents as text and returns the first
-/// http(s) URL it contains, if any.
+/// http(s) or magnet URL it contains, if any.
 pub fn read_url() -> Option<String> {
     let text = read_clipboard_text()?;
     extract_url(&text)
@@ -46,19 +46,24 @@ fn read_clipboard_text() -> Option<String> {
             }
         };
         let hglobal = HGLOBAL(h.0);
+        let size_bytes = GlobalSize(hglobal);
+        if size_bytes == 0 {
+            let _ = CloseClipboard();
+            return None;
+        }
+
         let p = GlobalLock(hglobal) as *const u16;
         if p.is_null() {
             let _ = CloseClipboard();
             return None;
         }
 
-        // Find length up to NUL terminator.
+        // Clamp search length to the allocated buffer size and the 8192-char limit
+        // to prevent access violations on malformed or unterminated clipboard payloads.
+        let max_chars = (size_bytes / 2).min(8192);
         let mut len = 0usize;
-        while *p.add(len) != 0 {
+        while len < max_chars && *p.add(len) != 0 {
             len += 1;
-            if len > 8192 {
-                break;
-            }
         }
         let slice = std::slice::from_raw_parts(p, len);
         let s = String::from_utf16_lossy(slice);
@@ -72,8 +77,8 @@ fn read_clipboard_text() -> Option<String> {
 fn url_regex() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
-        // Conservative: match http(s) URLs with at least a host, no whitespace.
-        Regex::new(r#"\bhttps?://[^\s<>"']{4,2048}"#).expect("static regex")
+        // Matches http(s) URLs or magnet links with at least a host/param, no whitespace.
+        Regex::new(r#"\b(?:https?://|magnet:\?)[^\s<>"']{4,2048}"#).expect("static regex")
     })
 }
 
@@ -122,7 +127,26 @@ mod tests {
     }
 
     #[test]
-    fn requires_http_scheme() {
+    fn requires_supported_scheme() {
         assert!(extract_url("ftp://example.com/file").is_none());
+        assert!(extract_url("file:///C:/path/file.txt").is_none());
+    }
+
+    #[test]
+    fn extracts_magnet_link() {
+        let text = "download magnet:?xt=urn:btih:d6b6e4a8&dn=sample.iso now";
+        assert_eq!(
+            extract_url(text),
+            Some("magnet:?xt=urn:btih:d6b6e4a8&dn=sample.iso".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_url_with_port_and_ip() {
+        let text = "check http://192.168.1.100:8080/download/item.zip.";
+        assert_eq!(
+            extract_url(text),
+            Some("http://192.168.1.100:8080/download/item.zip".to_string())
+        );
     }
 }
